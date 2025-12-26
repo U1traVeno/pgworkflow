@@ -49,12 +49,11 @@ Worker 的使用方式(极度简单):
 from __future__ import annotations
 import asyncio
 import logging
-from typing import Dict, Optional, Callable
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Dict, Optional
 
 from .base import DBEvent
 from .repo import EventRepository
+from .db import DatabaseSessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +77,7 @@ class EventQueue:
     def __init__(
         self,
         event_repo: EventRepository,
-        session_factory: Callable[[], AsyncSession],
+        session_manager: DatabaseSessionManager,
         maxsize: int = 1000,
         batch_size: int = 10,
         low_watermark: int = 5,
@@ -87,13 +86,13 @@ class EventQueue:
 
         Args:
             event_repo: 事件仓储
-            session_factory: 创建数据库会话的工厂函数
+            session_manager: 数据库会话管理器（提供 async with session_manager.session()）
             maxsize: 内存缓冲区最大容量
             batch_size: 每次 prefetch 的事件数量
             low_watermark: 触发 prefetch 的低水位阈值
         """
         self.event_repo = event_repo
-        self.session_factory = session_factory
+        self.session_manager = session_manager
         self.batch_size = batch_size
         self.low_watermark = low_watermark
 
@@ -159,8 +158,7 @@ class EventQueue:
                 return
 
             # 从 DB claim 事件
-            session = self.session_factory()
-            try:
+            async with self.session_manager.session() as session:
                 events = await self.event_repo.claim_events(
                     session, batch_size=self.batch_size
                 )
@@ -200,8 +198,6 @@ class EventQueue:
                     f"Prefetch 完成: 获取 {len(events)} 个事件, "
                     f"队列水位 {self._queue.qsize()}/{self._queue.maxsize}"
                 )
-            finally:
-                await session.close()
 
     async def get(self) -> DBEvent:
         """阻塞地从队列获取一个事件

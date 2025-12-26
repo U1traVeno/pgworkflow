@@ -3,14 +3,14 @@
 from __future__ import annotations
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
     from .routing import EventRouter
     from .queue import EventQueue
     from .repo import EventRepository
     from .worker import EventWorker
+    from .db import DatabaseSessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class EventWorkerPool:
         event_queue: EventQueue,
         event_repo: EventRepository,
         router: EventRouter,
-        session_factory: Callable[[], AsyncSession],
+        session_manager: DatabaseSessionManager,
         n_workers: int = 5,
         max_retries: int = 3,
         poll_interval: float = 1.0,
@@ -38,7 +38,7 @@ class EventWorkerPool:
             event_queue: 共享的事件队列
             event_repo: 事件仓储
             router: 事件路由器
-            session_factory: 创建数据库会话的工厂函数
+            session_manager: 数据库会话管理器（提供 async with session_manager.session()）
             n_workers: Worker 数量
             max_retries: 每个 Worker 的最大重试次数
             poll_interval: 队列为空时的轮询间隔（秒）
@@ -46,7 +46,7 @@ class EventWorkerPool:
         self.event_queue = event_queue
         self.event_repo = event_repo
         self.router = router
-        self.session_factory = session_factory
+        self.session_manager = session_manager
         self.n_workers = n_workers
         self.max_retries = max_retries
         self.poll_interval = poll_interval
@@ -72,7 +72,7 @@ class EventWorkerPool:
                 event_queue=self.event_queue,
                 event_repo=self.event_repo,
                 router=self.router,
-                session_factory=self.session_factory,
+                session_manager=self.session_manager,
                 worker_id=i,
                 max_retries=self.max_retries,
                 poll_interval=self.poll_interval,

@@ -4,15 +4,15 @@ from __future__ import annotations
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Callable, Generic, List, Optional, TypeVar
+from typing import TYPE_CHECKING, Generic, List, Optional, TypeVar
 
 from .base import DBEvent
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
     from .queue import EventQueue
     from .repo import EventRepository
     from .routing import EventRouter
+    from .db import DatabaseSessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ class EventWorker(BaseWorker[DBEvent]):
         event_queue: EventQueue,
         event_repo: EventRepository,
         router: EventRouter,
-        session_factory: Callable[[], AsyncSession],
+        session_manager: DatabaseSessionManager,
         worker_id: int,
         max_retries: int = 3,
         poll_interval: float = 1.0,
@@ -156,7 +156,7 @@ class EventWorker(BaseWorker[DBEvent]):
             event_queue: 事件队列
             event_repo: 事件仓储
             router: 事件路由器
-            session_factory: 创建数据库会话的工厂函数
+            session_manager: 数据库会话管理器（提供 async with session_manager.session()）
             worker_id: Worker 的唯一标识符
             max_retries: 最大重试次数
             poll_interval: 队列为空时的轮询间隔（秒）
@@ -165,7 +165,7 @@ class EventWorker(BaseWorker[DBEvent]):
         self.event_queue = event_queue
         self.event_repo = event_repo
         self.router = router
-        self.session_factory = session_factory
+        self.session_manager = session_manager
         self.worker_id = worker_id
 
     async def fetch_tasks(self, limit: int) -> List[DBEvent]:
@@ -204,9 +204,7 @@ class EventWorker(BaseWorker[DBEvent]):
             f"Worker {self.worker_id} 开始处理事件: {task['type']} (ID: {event_id})"
         )
 
-        # 获取数据库会话
-        session: AsyncSession = self.session_factory()
-        try:
+        async with self.session_manager.session() as session:
             # 标记事件为处理中
             if event_id:
                 await self.event_repo.mark_processing(session, event_id)
@@ -225,8 +223,6 @@ class EventWorker(BaseWorker[DBEvent]):
             logger.debug(
                 f"Worker {self.worker_id} 成功处理事件: {task['type']} (ID: {event_id})"
             )
-        finally:
-            await session.close()
 
     async def fail(self, task: DBEvent, exc: Exception) -> None:
         """处理失败的事件。
@@ -248,14 +244,11 @@ class EventWorker(BaseWorker[DBEvent]):
 
         # 标记事件为失败
         if event_id:
-            session = self.session_factory()
-            try:
+            async with self.session_manager.session() as session:
                 await self.event_repo.mark_failed(
                     session, event_id, error_message, increment_retry=True
                 )
                 await session.commit()
-            finally:
-                await session.close()
 
     async def ack(self, task: DBEvent) -> None:
         """确认任务完成。

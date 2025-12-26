@@ -8,9 +8,11 @@
 
 from __future__ import annotations
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional
 
 import asyncpg  # type: ignore
+
+from .db import DatabaseConfig
 
 if TYPE_CHECKING:
     from .queue import EventQueue
@@ -19,11 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 async def create_listener_connection(
-    host: str,
-    port: int,
-    user: str,
-    password: str,
-    database: str,
+    db: DatabaseConfig,
 ) -> asyncpg.Connection:
     """创建用于 LISTEN/NOTIFY 的专用 asyncpg 连接。
 
@@ -31,17 +29,19 @@ async def create_listener_connection(
     因为 SQLAlchemy 对 LISTEN/NOTIFY 的支持不好。
 
     Args:
-        host: 数据库主机
-        port: 数据库端口
-        user: 数据库用户
-        password: 数据库密码
-        database: 数据库名称
+        db: 数据库配置（用于生成 asyncpg DSN）
 
     Returns:
         asyncpg.Connection: 用于事件监听的专用连接
     """
-    dsn = f"postgresql://{user}:{password}@{host}:{port}/{database}"
-    connection: asyncpg.Connection = await asyncpg.connect(dsn)  # type: ignore
+    server_settings: Optional[Dict[str, str]] = None
+    if db.application_name:
+        server_settings = {"application_name": db.application_name}
+
+    connection: asyncpg.Connection = await asyncpg.connect(  # type: ignore
+        db.asyncpg_dsn,
+        server_settings=server_settings,
+    )
     logger.debug("为事件监听器创建了专用的 asyncpg 连接")
     return connection  # type: ignore
 

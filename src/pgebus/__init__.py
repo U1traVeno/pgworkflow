@@ -17,6 +17,7 @@ from .routing import EventRouter
 from .worker import EventWorker, BaseWorker
 from .pool import EventWorkerPool
 from .system import EventSystem, get_event_system, start_event_system
+from .db import DatabaseConfig, EngineConfig, DatabaseSessionManager
 
 __all__ = [
     # 模型
@@ -43,6 +44,10 @@ __all__ = [
     "EventSystem",
     "get_event_system",
     "start_event_system",
+    # DB
+    "DatabaseConfig",
+    "EngineConfig",
+    "DatabaseSessionManager",
 ]
 
 

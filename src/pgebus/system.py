@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 import logging
-from typing import Optional, Callable
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
 
 from .listener import EventListener, create_listener_connection
 from .pool import EventWorkerPool
 from .queue import EventQueue
 from .repo import EventRepository
 from .routing import EventRouter
+from .db import DatabaseConfig, DatabaseSessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +26,15 @@ class EventSystem:
     使用示例：
         router = EventRouter()
         event_system = EventSystem(
-            dispatcher=dispatcher,
-            session_factory=lambda: session_manager.session(),
-            db_host="localhost",
-            db_port=5432,
-            db_user="user",
-            db_password="password",
-            db_name="mydb",
+            router=router,
+            db=DatabaseConfig(
+                host="localhost",
+                port=5432,
+                user="user",
+                password="password",
+                database="mydb",
+                application_name="pgebus",
+            ),
             n_workers=5,
         )
         await event_system.start()
@@ -46,12 +47,7 @@ class EventSystem:
     def __init__(
         self,
         router: EventRouter,
-        session_factory: Callable[[], AsyncSession],
-        db_host: str,
-        db_port: int,
-        db_user: str,
-        db_password: str,
-        db_name: str,
+        db: DatabaseConfig,
         channel: str = "events",
         n_workers: int = 5,
         queue_maxsize: int = 1000,
@@ -62,12 +58,7 @@ class EventSystem:
 
         Args:
             router: 事件路由器
-            session_factory: 创建数据库会话的工厂函数
-            db_host: 数据库主机
-            db_port: 数据库端口
-            db_user: 数据库用户
-            db_password: 数据库密码
-            db_name: 数据库名称
+            db: 数据库配置（用于创建内部 engine/session）
             channel: PostgreSQL NOTIFY 频道名称
             n_workers: Worker 并发数量
             queue_maxsize: 事件队列最大容量（0 表示无限）
@@ -75,17 +66,15 @@ class EventSystem:
             poll_interval: Worker 轮询间隔（秒）
         """
         self.router = router
-        self.session_factory = session_factory
-        self.db_host = db_host
-        self.db_port = db_port
-        self.db_user = db_user
-        self.db_password = db_password
-        self.db_name = db_name
+        self.db = db
         self.channel = channel
         self.n_workers = n_workers
         self.queue_maxsize = queue_maxsize
         self.max_retries = max_retries
         self.poll_interval = poll_interval
+
+        # 内部创建 engine/session（使用 session_manager 的 async with 管理生命周期）
+        self.session_manager = DatabaseSessionManager(db)
 
         # 创建事件仓储
         self.event_repo = EventRepository()
@@ -93,7 +82,7 @@ class EventSystem:
         # 创建事件队列（基于数据库）
         self.event_queue = EventQueue(
             event_repo=self.event_repo,
-            session_factory=session_factory,
+            session_manager=self.session_manager,
             maxsize=queue_maxsize,
         )
 
@@ -107,13 +96,7 @@ class EventSystem:
         logger.info("启动事件系统...")
 
         # 创建 asyncpg 连接
-        self._connection = await create_listener_connection(
-            host=self.db_host,
-            port=self.db_port,
-            user=self.db_user,
-            password=self.db_password,
-            database=self.db_name,
-        )
+        self._connection = await create_listener_connection(self.db)
 
         # 创建并启动 EventListener
         self.listener = EventListener(
@@ -128,7 +111,7 @@ class EventSystem:
             event_queue=self.event_queue,
             event_repo=self.event_repo,
             router=self.router,
-            session_factory=self.session_factory,
+            session_manager=self.session_manager,
             n_workers=self.n_workers,
             max_retries=self.max_retries,
             poll_interval=self.poll_interval,
@@ -165,6 +148,9 @@ class EventSystem:
         if self.worker_pool:
             await self.worker_pool.stop()
 
+        # 关闭内部 engine
+        await self.session_manager.close()
+
         logger.info("事件系统已停止")
 
     def get_queue_size(self) -> int:
@@ -192,12 +178,7 @@ _event_system: Optional[EventSystem] = None
 
 def get_event_system(
     router: EventRouter,
-    session_factory: Callable[[], AsyncSession],
-    db_host: str,
-    db_port: int,
-    db_user: str,
-    db_password: str,
-    db_name: str,
+    db: DatabaseConfig,
     channel: str = "events",
     n_workers: int = 5,
     queue_maxsize: int = 1000,
@@ -206,12 +187,7 @@ def get_event_system(
 
     Args:
         router: 事件路由器
-        session_factory: 创建数据库会话的工厂函数
-        db_host: 数据库主机
-        db_port: 数据库端口
-        db_user: 数据库用户
-        db_password: 数据库密码
-        db_name: 数据库名称
+        db: 数据库配置
         channel: PostgreSQL NOTIFY 频道名称
         n_workers: Worker 数量
         queue_maxsize: 队列最大容量
@@ -223,12 +199,7 @@ def get_event_system(
     if _event_system is None:
         _event_system = EventSystem(
             router=router,
-            session_factory=session_factory,
-            db_host=db_host,
-            db_port=db_port,
-            db_user=db_user,
-            db_password=db_password,
-            db_name=db_name,
+            db=db,
             channel=channel,
             n_workers=n_workers,
             queue_maxsize=queue_maxsize,
@@ -238,12 +209,7 @@ def get_event_system(
 
 async def start_event_system(
     router: EventRouter,
-    session_factory: Callable[[], AsyncSession],
-    db_host: str,
-    db_port: int,
-    db_user: str,
-    db_password: str,
-    db_name: str,
+    db: DatabaseConfig,
     channel: str = "events",
     n_workers: int = 5,
     queue_maxsize: int = 1000,
@@ -254,12 +220,7 @@ async def start_event_system(
 
     Args:
         router: 事件路由器
-        session_factory: 创建数据库会话的工厂函数
-        db_host: 数据库主机
-        db_port: 数据库端口
-        db_user: 数据库用户
-        db_password: 数据库密码
-        db_name: 数据库名称
+        db: 数据库配置
         channel: PostgreSQL NOTIFY 频道名称
         n_workers: Worker 数量
         queue_maxsize: 队列最大容量
@@ -269,12 +230,7 @@ async def start_event_system(
     """
     event_system = get_event_system(
         router=router,
-        session_factory=session_factory,
-        db_host=db_host,
-        db_port=db_port,
-        db_user=db_user,
-        db_password=db_password,
-        db_name=db_name,
+        db=db,
         channel=channel,
         n_workers=n_workers,
         queue_maxsize=queue_maxsize,

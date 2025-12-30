@@ -3,6 +3,7 @@
 from __future__ import annotations
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.schema import CreateSchema
@@ -80,6 +81,12 @@ class EventSystem:
             settings.event_system.pending_poll_interval_seconds
         )
 
+        # 定时清理配置（按 processed_at 清理终态事件）
+        self.cleanup_enabled = settings.event_system.cleanup_enabled
+        self.cleanup_retention_seconds = settings.event_system.cleanup_retention_seconds
+        self.cleanup_interval_seconds = settings.event_system.cleanup_interval_seconds
+        self.cleanup_batch_size = settings.event_system.cleanup_batch_size
+
         # 内部创建 engine/session（使用 session_manager 的 async with 管理生命周期）
         self.session_manager = DatabaseSessionManager(self.db)
 
@@ -100,6 +107,43 @@ class EventSystem:
 
         # house-keeping task
         self._pending_poll_task: Optional[asyncio.Task[None]] = None
+        self._cleanup_task: Optional[asyncio.Task[None]] = None
+
+    async def _cleanup_loop(self) -> None:
+        try:
+            # 避免启动瞬间抢占资源
+            await asyncio.sleep(self.cleanup_interval_seconds)
+
+            while True:
+                if not self.cleanup_enabled or self.cleanup_retention_seconds <= 0:
+                    await asyncio.sleep(self.cleanup_interval_seconds)
+                    continue
+
+                cutoff = datetime.now(timezone.utc) - timedelta(
+                    seconds=self.cleanup_retention_seconds
+                )
+
+                try:
+                    async with self.session_manager.session() as session:
+                        deleted = await self.event_repo.purge_processed_events(
+                            session,
+                            older_than=cutoff,
+                            batch_size=self.cleanup_batch_size,
+                        )
+                        await session.commit()
+
+                    if deleted > 0:
+                        logger.info(
+                            "事件定时清理完成: deleted=%s cutoff=%s",
+                            deleted,
+                            cutoff.isoformat(),
+                        )
+                except Exception as exc:
+                    logger.error("事件定时清理失败: %s", exc)
+
+                await asyncio.sleep(self.cleanup_interval_seconds)
+        except asyncio.CancelledError:
+            return
 
     async def _pending_poll_loop(self) -> None:
         try:
@@ -157,6 +201,20 @@ class EventSystem:
                     self.pending_poll_interval_seconds,
                 )
 
+        # 启动定时清理任务（按 processed_at 清理终态事件）
+        if self.cleanup_enabled and self.cleanup_retention_seconds > 0:
+            if self._cleanup_task is None or self._cleanup_task.done():
+                self._cleanup_task = asyncio.create_task(
+                    self._cleanup_loop(),
+                    name="event-system-cleanup",
+                )
+                logger.info(
+                    "事件定时清理已启动: retention=%ss interval=%ss batch=%s",
+                    self.cleanup_retention_seconds,
+                    self.cleanup_interval_seconds,
+                    self.cleanup_batch_size,
+                )
+
         logger.info(
             f"事件系统已启动: "
             f"Workers={self.n_workers}, "
@@ -183,6 +241,16 @@ class EventSystem:
                 pass
             finally:
                 self._pending_poll_task = None
+
+        # 先停止定时清理，减少关闭期间的 DB 压力
+        if self._cleanup_task is not None:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._cleanup_task = None
 
         # 先停止 listener，不再接收新事件
         if self.listener:

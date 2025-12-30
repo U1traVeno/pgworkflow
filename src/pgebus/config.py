@@ -6,7 +6,14 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple, Type
 
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic_settings import BaseSettings, InitSettingsSource, PydanticBaseSettingsSource, SettingsConfigDict, TomlConfigSettingsSource, YamlConfigSettingsSource
+from pydantic_settings import (
+    BaseSettings,
+    InitSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    TomlConfigSettingsSource,
+    YamlConfigSettingsSource,
+)
 
 JsonSerializer = Callable[[Any], str]
 JsonDeserializer = Callable[[str], Any]
@@ -139,6 +146,29 @@ class EventSystemConfig(BaseModel):
         description="优雅关闭时是否等待队列中的事件处理完毕。",
     )
 
+    cleanup_enabled: bool = Field(
+        default=False,
+        description="是否启用定时清理已终态事件(COMPLETED/FAILED)。",
+    )
+    cleanup_retention_seconds: int = Field(
+        default=7 * 24 * 3600,
+        ge=0,
+        description=(
+            "保留时长（秒）。仅清理 processed_at 早于 now-retention 的事件；0 表示不清理。"
+        ),
+    )
+    cleanup_interval_seconds: float = Field(
+        default=3600.0,
+        ge=1.0,
+        description="清理任务执行间隔（秒）。",
+    )
+    cleanup_batch_size: int = Field(
+        default=1000,
+        ge=1,
+        le=10000,
+        description="每轮清理的最大删除条数（分批删除）。",
+    )
+
 
 class EnvVarFileConfigSettingsSource(InitSettingsSource):
     """
@@ -197,7 +227,6 @@ class EnvVarFileConfigSettingsSource(InitSettingsSource):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(env_var={self.env_var}, file_path={self.file_path_str!r})"
-
 
 
 class Settings(BaseSettings):

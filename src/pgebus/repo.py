@@ -8,7 +8,7 @@ import logging
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update, func
+from sqlalchemy import delete, select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Event, EventStatus
@@ -18,6 +18,64 @@ logger = logging.getLogger(__name__)
 
 class EventRepository:
     """事件仓储层，负责事件的数据库操作"""
+
+    async def purge_processed_events(
+        self,
+        session: AsyncSession,
+        *,
+        older_than: datetime,
+        batch_size: int = 1000,
+        statuses: tuple[EventStatus, ...] = (EventStatus.COMPLETED, EventStatus.FAILED),
+    ) -> int:
+        """批量清理已终态事件（并发安全）。
+
+        删除 status in (COMPLETED, FAILED) 且 processed_at 早于阈值的记录。
+        通过 SELECT ... FOR UPDATE SKIP LOCKED 选取待删 id，支持多实例并行清理。
+
+        Args:
+            session: 数据库会话
+            older_than: 过期阈值（processed_at < older_than）
+            batch_size: 本次最多删除的条数
+            statuses: 允许删除的状态集合
+
+        Returns:
+            实际删除的条数
+        """
+        if batch_size <= 0:
+            return 0
+
+        # processed_at 存储为 UTC 时间；调用方应传入 UTC cutoff
+        to_delete = (
+            select(Event.id)
+            .where(
+                (Event.processed_at.is_not(None))
+                & (Event.processed_at < older_than)
+                & (Event.status.in_(statuses))
+            )
+            .order_by(Event.processed_at)
+            .limit(batch_size)
+            .with_for_update(skip_locked=True)
+            .cte("to_delete")
+        )
+
+        stmt = (
+            delete(Event)
+            .where(Event.id.in_(select(to_delete.c.id)))
+            .returning(Event.id)
+        )
+
+        result = await session.execute(stmt)
+        deleted_ids = list(result.scalars().all())
+
+        if deleted_ids:
+            logger.info(
+                "Purged %s processed events: %s%s",
+                len(deleted_ids),
+                deleted_ids[:20],
+                "..." if len(deleted_ids) > 20 else "",
+            )
+
+        return len(deleted_ids)
 
     async def get_event_by_id(
         self, session: AsyncSession, event_id: int

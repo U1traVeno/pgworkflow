@@ -104,28 +104,28 @@ class TransactionSession:
     # ===== 明确禁止（破坏 dispatcher 控制权） =====
 
     def begin(self) -> Any:
-        raise RuntimeError("Transaction is managed by pgebus")
+        raise RuntimeError("Transaction is managed by pgoutbox")
 
     def begin_nested(self) -> Any:
-        raise RuntimeError("Transaction is managed by pgebus")
+        raise RuntimeError("Transaction is managed by pgoutbox")
 
     async def commit(self) -> None:
-        raise RuntimeError("Transaction is managed by pgebus")
+        raise RuntimeError("Transaction is managed by pgoutbox")
 
     async def rollback(self) -> None:
-        raise RuntimeError("Transaction is managed by pgebus")
+        raise RuntimeError("Transaction is managed by pgoutbox")
 
     async def close(self) -> None:
-        raise RuntimeError("Session lifecycle is managed by pgebus")
+        raise RuntimeError("Session lifecycle is managed by pgoutbox")
 
     async def invalidate(self) -> None:
-        raise RuntimeError("Session lifecycle is managed by pgebus")
+        raise RuntimeError("Session lifecycle is managed by pgoutbox")
 
     async def connection(self, *args: Any, **kwargs: Any) -> Any:
-        raise RuntimeError("Connection access is managed by pgebus")
+        raise RuntimeError("Connection access is managed by pgoutbox")
 
     def get_bind(self, *args: Any, **kwargs: Any) -> Any:
-        raise RuntimeError("Connection access is managed by pgebus")
+        raise RuntimeError("Connection access is managed by pgoutbox")
 
     # ===== 明确的逃生门 =====
 
@@ -133,7 +133,7 @@ class TransactionSession:
     def unsafe(self) -> AsyncSession:
         """Raw AsyncSession access.
 
-        Using this means you give up pgebus transaction guarantees.
+        Using this means you give up pgoutbox transaction guarantees.
         """
         return self._session
 

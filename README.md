@@ -1,4 +1,4 @@
-# pgworkflow
+# pgoutbox
 
 [**English**](README.md) | [简体中文](README.zh-CN.md)
 
@@ -6,11 +6,11 @@ PostgreSQL-backed workflow / outbox engine for irreversible operations
 
 ---
 
-## What pgworkflow Is
+## What pgoutbox Is
 
-**pgworkflow is NOT an event bus.**
+**pgoutbox is NOT an event bus.**
 
-pgworkflow is a **database-backed workflow and outbox engine** designed for systems that:
+pgoutbox is a **database-backed workflow and outbox engine** designed for systems that:
 
 - Must interact with **irreversible external side effects**
 - Require **strong auditability and traceability**
@@ -23,7 +23,7 @@ If you are looking for pub/sub, streaming, or fan-out messaging — this is not 
 
 ## Core Idea
 
-pgworkflow embraces a simple but strict model:
+pgoutbox embraces a simple but strict model:
 
 > **PostgreSQL is the single source of truth.  
 > External side effects are never considered transactional.  
@@ -70,9 +70,9 @@ It helps you answer questions like:
 
 ---
 
-## What pgworkflow Is NOT
+## What pgoutbox Is NOT
 
-pgworkflow does **not** replace:
+pgoutbox does **not** replace:
 
 - RabbitMQ
 - Redis Streams
@@ -91,7 +91,7 @@ If you need throughput, fan-out, or decoupled consumers, use a real message brok
 
 ---
 
-## When pgworkflow Makes Sense
+## When pgoutbox Makes Sense
 
 You are likely a good fit if:
 
@@ -106,7 +106,7 @@ You are likely a good fit if:
 
 ## When You Should Not Use It
 
-You probably should not use pgworkflow if:
+You probably should not use pgoutbox if:
 
 - Your system is microservice-heavy
 - You need cross-region horizontal scaling
@@ -118,7 +118,7 @@ You probably should not use pgworkflow if:
 
 ## API Overview
 
-pgworkflow intentionally mimics FastAPI's mental model:
+pgoutbox intentionally mimics FastAPI's mental model:
 
 - Define workflows via `WorkflowRouter`
 - Register steps via `@router.on("...")`
@@ -134,7 +134,7 @@ pgworkflow intentionally mimics FastAPI's mental model:
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from pgworkflow import (
+from pgoutbox import (
     WorkflowRouter,
     WorkflowSystem,
     Settings,
@@ -160,8 +160,8 @@ async def main() -> None:
             "user": "postgres",
             "password": "postgres",
             "database": "postgres",
-            "application_name": "pgworkflow",
-            "schema": "pgworkflow",
+            "application_name": "pgoutbox",
+            "schema": "pgoutbox",
         },
         workflow_system={
             "channel": "workflow",
@@ -232,13 +232,13 @@ An explicit escape hatch exists:
 ctx.session.unsafe
 ```
 
-Using it means you give up pgworkflow’s guarantees.
+Using it means you give up pgoutbox’s guarantees.
 
 ---
 
 ## Consistency Model (Important)
 
-pgworkflow does **not** attempt to make external side effects transactional.
+pgoutbox does **not** attempt to make external side effects transactional.
 
 Instead, it guarantees:
 
@@ -247,7 +247,7 @@ Instead, it guarantees:
 - Every attempt is observable and auditable
 
 External systems may succeed or fail independently.  
-pgworkflow ensures your database never lies about it.
+pgoutbox ensures your database never lies about it.
 
 ---
 

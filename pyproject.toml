@@ -1,7 +1,7 @@
 [project]
-name = "pgebus"
+name = "pgoutbox"
 version = "0.1.0"
-description = "PostgreSQL-based event bus system"
+description = "pgoutbox is a PostgreSQL-backed transactional outbox processor."
 readme = "README.md"
 authors = [
     { name = "veno", email = "happ1less1917@gmail.com" }
@@ -24,7 +24,7 @@ dev = [
 ]
 
 [project.scripts]
-pgebus = "pgebus:main"
+pgoutbox = "pgoutbox:main"
 
 [build-system]
 requires = ["uv_build>=0.9.9,<0.10.0"]

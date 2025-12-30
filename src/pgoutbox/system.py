@@ -37,7 +37,7 @@ class EventSystem:
                 "user": "user",
                 "password": "password",
                 "database": "mydb",
-                "application_name": "pgebus",
+                "application_name": "pgoutbox",
             },
             event_system={
                 "n_workers": 5,

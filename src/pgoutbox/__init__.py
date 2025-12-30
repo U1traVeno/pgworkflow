@@ -1,10 +1,3 @@
-"""
-pgebus - 基于 PostgreSQL 的事件总线系统
-
-一个轻量事件系统，使用 PostgreSQL 作为唯一的事实来源。
-支持事件发布、订阅、延迟执行和并发处理。
-"""
-
 __version__ = "0.1.0"
 
 # 导出核心组件
@@ -59,5 +52,5 @@ __all__ = [
 
 
 def main() -> None:
-    print("pgebus - PostgreSQL Event Bus System")
+    print("pgoutbox is a PostgreSQL-backed transactional outbox processor.")
     print(f"Version: {__version__}")

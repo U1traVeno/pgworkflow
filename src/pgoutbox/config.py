@@ -69,7 +69,7 @@ class DatabaseConfig(BaseModel):
 
     # 默认使用独立 schema 与业务表隔离
     model_config = ConfigDict(populate_by_name=True)
-    schema_name: str = Field(default="pgebus", alias="schema")
+    schema_name: str = Field(default="pgoutbox", alias="schema")
 
     engine: EngineConfig = Field(default_factory=EngineConfig)
 
@@ -179,7 +179,7 @@ class EnvVarFileConfigSettingsSource(InitSettingsSource):
     def __init__(
         self,
         settings_cls: Type[BaseSettings],
-        env_var: str = "PGEBUS_CONFIG_FILE",
+        env_var: str = "PGOUTBOX_CONFIG_FILE",
         env_file_encoding: Optional[str] = None,
     ):
         """
@@ -230,13 +230,13 @@ class EnvVarFileConfigSettingsSource(InitSettingsSource):
 
 
 class Settings(BaseSettings):
-    """pgebus 配置（仅包含 DB 与事件系统）。"""
+    """pgoutbox 配置（仅包含 DB 与事件系统）。"""
 
     model_config = SettingsConfigDict(
-        toml_file=Path("pgebus.toml"),
-        yaml_file=Path("pgebus.yaml") or Path("pgebus.yml"),
+        toml_file=Path("pgoutbox.toml"),
+        yaml_file=Path("pgoutbox.yaml") or Path("pgoutbox.yml"),
         yaml_file_encoding="utf-8",
-        env_prefix="PGEBUS_",
+        env_prefix="PGOUTBOX_",
         env_nested_delimiter="__",
     )
 

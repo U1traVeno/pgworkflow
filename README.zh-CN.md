@@ -1,4 +1,4 @@
-# pgworkflow
+# pgoutbox
 
 [**English**](README.md) | [简体中文](README.zh-CN.md)
 
@@ -7,11 +7,11 @@
 
 ---
 
-## pgworkflow 是什么
+## pgoutbox 是什么
 
-**pgworkflow 不是 Event Bus，也不是消息队列。**
+**pgoutbox 不是 Event Bus，也不是消息队列。**
 
-pgworkflow 是一个**基于 PostgreSQL 的工作流 / outbox 执行引擎**，用于解决下面这一类问题：
+pgoutbox 是一个**基于 PostgreSQL 的工作流 / outbox 执行引擎**，用于解决下面这一类问题：
 
 - 系统需要调用 **不可回滚的外部系统**
 - 失败不能“算了重试”
@@ -19,13 +19,13 @@ pgworkflow 是一个**基于 PostgreSQL 的工作流 / outbox 执行引擎**，�
 - PostgreSQL 已经是系统的事实来源（Source of Truth）
 
 如果你想要的是发布 / 订阅、广播、流式处理 ——  
-**请不要使用 pgworkflow。**
+**请不要使用 pgoutbox。**
 
 ---
 
 ## 核心思想
 
-pgworkflow 只坚持三件事：
+pgoutbox 只坚持三件事：
 
 > **PostgreSQL 是唯一可信状态源**  
 > **外部副作用永远不被视为事务的一部分**  
@@ -73,9 +73,9 @@ pgworkflow 只坚持三件事：
 
 ---
 
-## pgworkflow 不是什么
+## pgoutbox 不是什么
 
-pgworkflow **不能、也不打算替代**：
+pgoutbox **不能、也不打算替代**：
 
 - RabbitMQ
 - Redis Streams
@@ -95,9 +95,9 @@ pgworkflow **不能、也不打算替代**：
 
 ---
 
-## 什么时候适合用 pgworkflow
+## 什么时候适合用 pgoutbox
 
-你很可能适合 pgworkflow，如果：
+你很可能适合 pgoutbox，如果：
 
 - 系统是**单体或轻分布式**
 - 你**完全控制 PostgreSQL**
@@ -110,7 +110,7 @@ pgworkflow **不能、也不打算替代**：
 
 ## 什么时候不该用
 
-如果符合以下情况，请不要使用 pgworkflow：
+如果符合以下情况，请不要使用 pgoutbox：
 
 - 系统高度微服务化
 - 需要跨地域水平扩展
@@ -122,7 +122,7 @@ pgworkflow **不能、也不打算替代**：
 
 ## API 概览
 
-pgworkflow 有意采用类似 FastAPI 的心智模型：
+pgoutbox 有意采用类似 FastAPI 的心智模型：
 
 - 使用 `WorkflowRouter` 定义工作流
 - 使用 `@router.on("...")` 注册步骤
@@ -138,7 +138,7 @@ pgworkflow 有意采用类似 FastAPI 的心智模型：
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from pgworkflow import (
+from pgoutbox import (
     WorkflowRouter,
     WorkflowSystem,
     Settings,
@@ -164,8 +164,8 @@ async def main() -> None:
             "user": "postgres",
             "password": "postgres",
             "database": "postgres",
-            "application_name": "pgworkflow",
-            "schema": "pgworkflow",
+            "application_name": "pgoutbox",
+            "schema": "pgoutbox",
         },
         workflow_system={
             "channel": "workflow",
@@ -236,13 +236,13 @@ asyncio.run(main())
 ctx.session.unsafe
 ```
 
-一旦使用，意味着你放弃 pgworkflow 提供的事务保证。
+一旦使用，意味着你放弃 pgoutbox 提供的事务保证。
 
 ---
 
 ## 一致性模型（请务必阅读）
 
-pgworkflow **不会、也无法**让外部副作用具备事务性。
+pgoutbox **不会、也无法**让外部副作用具备事务性。
 
 它只保证：
 
@@ -251,7 +251,7 @@ pgworkflow **不会、也无法**让外部副作用具备事务性。
 - 每一次尝试都是可观察、可审计的
 
 外部系统可能成功或失败，  
-pgworkflow 的责任是：**数据库永远不说谎。**
+pgoutbox 的责任是：**数据库永远不说谎。**
 
 ---
 

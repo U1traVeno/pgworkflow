@@ -2,7 +2,7 @@
 
 目标:
 - 提供数据库配置项（由 pydantic-settings 统一管理）
-- 由 pgebus 内部创建 SQLAlchemy AsyncEngine
+- 由 pgoutbox 内部创建 SQLAlchemy AsyncEngine
 - 对外暴露一个 session_manager，使用 async with 获取会话
 """
 
